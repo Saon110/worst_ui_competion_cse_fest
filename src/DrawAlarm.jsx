@@ -77,28 +77,82 @@ export default function DrawAlarm() {
       audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
       const ctx = audioContextRef.current;
       
-      const playBeep = () => {
-        if (!isRinging) return;
+      let weirdCounter = 0;
+      
+      const playWeirdSound = () => {
+        if (!audioContextRef.current) return;
         
-        const oscillator = ctx.createOscillator();
+        // Create multiple oscillators for chaotic sound
+        const osc1 = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        const osc3 = ctx.createOscillator();
         const gainNode = ctx.createGain();
+        const distortion = ctx.createWaveShaper();
         
-        oscillator.connect(gainNode);
+        // Create distortion curve for harsh sound
+        const makeDistortionCurve = (amount) => {
+          const samples = 44100;
+          const curve = new Float32Array(samples);
+          for (let i = 0; i < samples; i++) {
+            const x = (i * 2) / samples - 1;
+            curve[i] = ((3 + amount) * x * 20 * (Math.PI / 180)) / (Math.PI + amount * Math.abs(x));
+          }
+          return curve;
+        };
+        distortion.curve = makeDistortionCurve(400);
+        
+        // Connect oscillators through distortion
+        osc1.connect(distortion);
+        osc2.connect(distortion);
+        osc3.connect(distortion);
+        distortion.connect(gainNode);
         gainNode.connect(ctx.destination);
         
-        // High pitch frequency (2000-3000 Hz range)
-        oscillator.frequency.setValueAtTime(2500, ctx.currentTime);
-        oscillator.type = 'square';
+        // Weird random frequencies that clash horribly
+        const baseFreq = 150 + Math.random() * 100;
+        osc1.frequency.setValueAtTime(baseFreq, ctx.currentTime);
+        osc1.frequency.linearRampToValueAtTime(baseFreq * 3.7, ctx.currentTime + 0.1);
+        osc1.frequency.linearRampToValueAtTime(baseFreq * 0.5, ctx.currentTime + 0.2);
+        osc1.type = 'sawtooth';
         
-        gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+        // Dissonant frequency (not harmonically related)
+        osc2.frequency.setValueAtTime(baseFreq * 1.414, ctx.currentTime); // sqrt(2) ratio = very dissonant
+        osc2.frequency.exponentialRampToValueAtTime(baseFreq * 2.71, ctx.currentTime + 0.15);
+        osc2.type = 'square';
         
-        oscillator.start(ctx.currentTime);
-        oscillator.stop(ctx.currentTime + 0.5);
+        // Super high scratchy frequency
+        osc3.frequency.setValueAtTime(3500 + Math.random() * 1500, ctx.currentTime);
+        osc3.frequency.linearRampToValueAtTime(1000 + Math.random() * 500, ctx.currentTime + 0.1);
+        osc3.type = 'sawtooth';
+        
+        // Chaotic volume changes
+        gainNode.gain.setValueAtTime(0.4, ctx.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0.1, ctx.currentTime + 0.05);
+        gainNode.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.1);
+        gainNode.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+        
+        osc1.start(ctx.currentTime);
+        osc2.start(ctx.currentTime);
+        osc3.start(ctx.currentTime);
+        osc1.stop(ctx.currentTime + 0.3);
+        osc2.stop(ctx.currentTime + 0.3);
+        osc3.stop(ctx.currentTime + 0.3);
+        
+        weirdCounter++;
       };
       
-      playBeep();
-      oscillatorRef.current = setInterval(playBeep, 700);
+      playWeirdSound();
+      // Irregular timing makes it more annoying
+      const scheduleNext = () => {
+        const randomDelay = 200 + Math.random() * 300; // Random delay between 200-500ms
+        oscillatorRef.current = setTimeout(() => {
+          playWeirdSound();
+          if (audioContextRef.current) {
+            scheduleNext();
+          }
+        }, randomDelay);
+      };
+      scheduleNext();
     } catch (e) {
       console.log('Audio not supported');
     }
@@ -106,7 +160,7 @@ export default function DrawAlarm() {
 
   const stopAlarmSound = () => {
     if (oscillatorRef.current) {
-      clearInterval(oscillatorRef.current);
+      clearTimeout(oscillatorRef.current);
       oscillatorRef.current = null;
     }
     if (audioContextRef.current) {
