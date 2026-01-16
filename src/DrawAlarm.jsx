@@ -63,6 +63,37 @@ export default function DrawAlarm() {
     setIsDrawing(false);
   };
 
+  // Touch event handlers for mobile support
+  const handleTouchStart = (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const rect = canvasRef.current.getBoundingClientRect();
+    const scaleX = BOARD_WIDTH / rect.width;
+    const scaleY = BOARD_HEIGHT / rect.height;
+    const x = (touch.clientX - rect.left) * scaleX;
+    const y = (touch.clientY - rect.top) * scaleY;
+    setIsDrawing(true);
+    setPath([{ x, y }]);
+  };
+
+  const handleTouchMove = (e) => {
+    e.preventDefault();
+    if (isDrawing) {
+      const touch = e.touches[0];
+      const rect = canvasRef.current.getBoundingClientRect();
+      const scaleX = BOARD_WIDTH / rect.width;
+      const scaleY = BOARD_HEIGHT / rect.height;
+      const x = (touch.clientX - rect.left) * scaleX;
+      const y = (touch.clientY - rect.top) * scaleY;
+      setPath(prev => [...prev, { x, y }]);
+    }
+  };
+
+  const handleTouchEnd = (e) => {
+    e.preventDefault();
+    setIsDrawing(false);
+  };
+
   const handleContextMenu = (e) => {
     e.preventDefault();
   };
@@ -134,11 +165,11 @@ export default function DrawAlarm() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-400 via-pink-400 to-red-400 flex items-center justify-center p-8">
-      <div className="bg-white rounded-lg shadow-2xl p-8 max-w-4xl">
-        <div className="flex items-center justify-center gap-3 mb-6">
-          <Clock className="w-8 h-8 text-purple-600" />
-          <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">
+    <div className="min-h-screen bg-gradient-to-br from-purple-400 via-pink-400 to-red-400 flex items-center justify-center p-4 sm:p-8">
+      <div className="bg-white rounded-lg shadow-2xl p-4 sm:p-8 w-full max-w-4xl">
+        <div className="flex items-center justify-center gap-2 sm:gap-3 mb-4 sm:mb-6">
+          <Clock className="w-6 h-6 sm:w-8 sm:h-8 text-purple-600" />
+          <h1 className="text-2xl sm:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">
             DrawAlarm ✏️
           </h1>
         </div>
@@ -148,8 +179,10 @@ export default function DrawAlarm() {
             <h2 className="text-2xl font-bold text-center text-gray-800 mb-2">
               {getPromptText()}
             </h2>
-            <p className="text-center text-gray-600 text-sm">
-              Click and hold the left mouse button while drawing a line on the board. The length of your line determines the time value!
+            <p className="text-center text-gray-600 text-xs sm:text-sm">
+              <span className="hidden sm:inline">Click and hold the left mouse button while drawing a line on the board.</span>
+              <span className="sm:hidden">Touch and drag to draw a line on the board.</span>
+              {' '}The length of your line determines the time value!
             </p>
             {hour > 0 && step !== 'hour' && (
               <p className="text-center text-green-600 font-semibold mt-2">
@@ -178,11 +211,10 @@ export default function DrawAlarm() {
         {step !== 'done' && step !== 'confirm' && (
           <div className="mb-4 flex justify-center">
             <div 
-              className="relative border-4 border-gray-800 bg-white"
+              className="relative border-4 border-gray-800 bg-white w-full max-w-[600px] aspect-[3/2]"
               style={{ 
-                width: `${BOARD_WIDTH}px`, 
-                height: `${BOARD_HEIGHT}px`,
-                cursor: cursorInCanvas ? 'crosshair' : 'default'
+                cursor: cursorInCanvas ? 'crosshair' : 'default',
+                touchAction: 'none'
               }}
               onMouseEnter={() => setCursorInCanvas(true)}
               onMouseLeave={() => setCursorInCanvas(false)}
@@ -195,9 +227,13 @@ export default function DrawAlarm() {
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
                 className="w-full h-full"
+                style={{ touchAction: 'none' }}
               />
-              <div className="absolute bottom-2 right-2 text-xs text-gray-400">
+              <div className="absolute bottom-1 right-1 sm:bottom-2 sm:right-2 text-[10px] sm:text-xs text-gray-400">
                 30cm × 20cm
               </div>
             </div>
@@ -212,20 +248,20 @@ export default function DrawAlarm() {
           </div>
         )}
 
-        <div className="flex justify-center gap-4">
+        <div className="flex justify-center gap-2 sm:gap-4 flex-wrap">
           {step !== 'done' && step !== 'confirm' && (
             <>
               <button
                 onClick={handleSet}
                 disabled={path.length === 0}
-                className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-8 py-3 rounded-lg font-bold text-lg hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-105"
+                className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 sm:px-8 py-2 sm:py-3 rounded-lg font-bold text-base sm:text-lg hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-105 active:scale-95"
               >
                 SET
               </button>
               <button
                 onClick={handleErase}
                 disabled={path.length === 0}
-                className="bg-red-600 text-white px-8 py-3 rounded-lg font-bold text-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-105"
+                className="bg-red-600 text-white px-6 sm:px-8 py-2 sm:py-3 rounded-lg font-bold text-base sm:text-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-105 active:scale-95"
               >
                 ERASE
               </button>
@@ -235,7 +271,7 @@ export default function DrawAlarm() {
           {step === 'confirm' && (
             <button
               onClick={handleSetAlarm}
-              className="bg-gradient-to-r from-green-600 to-teal-600 text-white px-8 py-3 rounded-lg font-bold text-lg hover:from-green-700 hover:to-teal-700 transition-all transform hover:scale-105"
+              className="bg-gradient-to-r from-green-600 to-teal-600 text-white px-6 sm:px-8 py-2 sm:py-3 rounded-lg font-bold text-base sm:text-lg hover:from-green-700 hover:to-teal-700 transition-all transform hover:scale-105 active:scale-95"
             >
               SET ALARM
             </button>
@@ -244,7 +280,7 @@ export default function DrawAlarm() {
           {(step === 'confirm' || step === 'done') && (
             <button
               onClick={handleReset}
-              className="bg-gray-600 text-white px-8 py-3 rounded-lg font-bold text-lg hover:bg-gray-700 transition-all transform hover:scale-105"
+              className="bg-gray-600 text-white px-6 sm:px-8 py-2 sm:py-3 rounded-lg font-bold text-base sm:text-lg hover:bg-gray-700 transition-all transform hover:scale-105 active:scale-95"
             >
               RESET
             </button>
@@ -265,9 +301,10 @@ export default function DrawAlarm() {
           </div>
         )}
 
-        <div className="mt-6 text-center text-xs text-gray-500">
+        <div className="mt-4 sm:mt-6 text-center text-xs text-gray-500">
           <p>💡 Pro tip: Draw longer lines for bigger numbers!</p>
-          <p className="mt-1">🎨 Remember to click and hold while drawing</p>
+          <p className="mt-1 hidden sm:block">🎨 Remember to click and hold while drawing</p>
+          <p className="mt-1 sm:hidden">🎨 Touch and drag to draw!</p>
         </div>
       </div>
     </div>
