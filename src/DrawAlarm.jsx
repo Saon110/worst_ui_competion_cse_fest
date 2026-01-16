@@ -2,13 +2,17 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Clock } from 'lucide-react';
 
 export default function DrawAlarm() {
-  const [step, setStep] = useState('hour'); // 'hour', 'minute', 'second', 'done'
+  const [step, setStep] = useState('hour'); // 'hour', 'minute', 'second', 'confirm', 'countdown', 'ringing', 'done'
   const [isDrawing, setIsDrawing] = useState(false);
   const [path, setPath] = useState([]);
   const [hour, setHour] = useState(0);
   const [minute, setMinute] = useState(0);
   const [second, setSecond] = useState(0);
+  const [remainingTime, setRemainingTime] = useState(0);
+  const [isRinging, setIsRinging] = useState(false);
   const canvasRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const oscillatorRef = useRef(null);
   const [cursorInCanvas, setCursorInCanvas] = useState(false);
 
   const BOARD_WIDTH_CM = 30;
@@ -39,6 +43,77 @@ export default function DrawAlarm() {
       ctx.stroke();
     }
   }, [path]);
+
+  // Countdown timer effect
+  useEffect(() => {
+    let interval;
+    if (step === 'countdown' && remainingTime > 0) {
+      interval = setInterval(() => {
+        setRemainingTime(prev => {
+          if (prev <= 1) {
+            setStep('ringing');
+            setIsRinging(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [step, remainingTime]);
+
+  // High-pitch alarm sound effect
+  useEffect(() => {
+    if (isRinging) {
+      playAlarmSound();
+    } else {
+      stopAlarmSound();
+    }
+    return () => stopAlarmSound();
+  }, [isRinging]);
+
+  const playAlarmSound = () => {
+    try {
+      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      const ctx = audioContextRef.current;
+      
+      const playBeep = () => {
+        if (!isRinging) return;
+        
+        const oscillator = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        
+        // High pitch frequency (2000-3000 Hz range)
+        oscillator.frequency.setValueAtTime(2500, ctx.currentTime);
+        oscillator.type = 'square';
+        
+        gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+        
+        oscillator.start(ctx.currentTime);
+        oscillator.stop(ctx.currentTime + 0.5);
+      };
+      
+      playBeep();
+      oscillatorRef.current = setInterval(playBeep, 700);
+    } catch (e) {
+      console.log('Audio not supported');
+    }
+  };
+
+  const stopAlarmSound = () => {
+    if (oscillatorRef.current) {
+      clearInterval(oscillatorRef.current);
+      oscillatorRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+  };
 
   const handleMouseDown = (e) => {
     if (e.button === 0) { // Left click
@@ -141,19 +216,42 @@ export default function DrawAlarm() {
     }
   };
 
+  const formatTime = (totalSeconds) => {
+    const hrs = Math.floor(totalSeconds / 3600);
+    const mins = Math.floor((totalSeconds % 3600) / 60);
+    const secs = totalSeconds % 60;
+    return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const handleErase = () => {
     setPath([]);
   };
 
   const handleSetAlarm = () => {
+    const totalSeconds = Math.floor(hour * 3600 + minute * 60 + second);
+    if (totalSeconds === 0) {
+      // If total time is 0, go directly to ringing
+      setStep('ringing');
+      setIsRinging(true);
+    } else {
+      setRemainingTime(totalSeconds);
+      setStep('countdown');
+    }
+  };
+
+  const handleStopAlarm = () => {
+    setIsRinging(false);
     setStep('done');
   };
 
   const handleReset = () => {
+    setIsRinging(false);
+    stopAlarmSound();
     setStep('hour');
     setHour(0);
     setMinute(0);
     setSecond(0);
+    setRemainingTime(0);
     setPath([]);
   };
 
@@ -174,7 +272,7 @@ export default function DrawAlarm() {
           </h1>
         </div>
 
-        {step !== 'done' && step !== 'confirm' && (
+        {(step === 'hour' || step === 'minute' || step === 'second') && (
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-center text-gray-800 mb-2">
               {getPromptText()}
@@ -184,12 +282,15 @@ export default function DrawAlarm() {
               <span className="sm:hidden">Touch and drag to draw a line on the board.</span>
               {' '}The length of your line determines the time value!
             </p>
-            {hour > 0 && step !== 'hour' && (
+            <p className="text-center text-yellow-600 text-xs mt-1">
+              💡 Don't draw anything and click SET to keep value as 0
+            </p>
+            {step !== 'hour' && (
               <p className="text-center text-green-600 font-semibold mt-2">
                 ✓ Hour set: {hour.toFixed(2)}
               </p>
             )}
-            {minute > 0 && step === 'second' && (
+            {step === 'second' && (
               <p className="text-center text-green-600 font-semibold mt-1">
                 ✓ Minute set: {minute.toFixed(2)}
               </p>
@@ -208,7 +309,7 @@ export default function DrawAlarm() {
           </div>
         )}
 
-        {step !== 'done' && step !== 'confirm' && (
+        {(step === 'hour' || step === 'minute' || step === 'second') && (
           <div className="mb-4 flex justify-center">
             <div 
               className="relative border-4 border-gray-800 bg-white w-full max-w-[600px] aspect-[3/2]"
@@ -240,7 +341,7 @@ export default function DrawAlarm() {
           </div>
         )}
 
-        {step !== 'done' && step !== 'confirm' && (
+        {(step === 'hour' || step === 'minute' || step === 'second') && (
           <div className="text-center mb-4">
             <p className="text-sm text-gray-600">
               Current line length: {calculateLineLength().toFixed(2)} cm
@@ -248,13 +349,44 @@ export default function DrawAlarm() {
           </div>
         )}
 
+        {/* Countdown Display */}
+        {step === 'countdown' && (
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-center text-gray-800 mb-4">
+              ⏳ COUNTDOWN
+            </h2>
+            <div className="text-6xl sm:text-8xl font-mono font-bold text-center text-purple-600 mb-4">
+              {formatTime(remainingTime)}
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-4 mb-4">
+              <div 
+                className="bg-gradient-to-r from-purple-600 to-pink-600 h-4 rounded-full transition-all duration-1000"
+                style={{ width: `${(remainingTime / Math.floor(hour * 3600 + minute * 60 + second)) * 100}%` }}
+              ></div>
+            </div>
+          </div>
+        )}
+
+        {/* Ringing Display */}
+        {step === 'ringing' && (
+          <div className="mb-6">
+            <div className="animate-pulse">
+              <h2 className="text-4xl sm:text-6xl font-bold text-center text-red-600 mb-4">
+                🔔 ALARM! 🔔
+              </h2>
+            </div>
+            <div className="text-2xl text-center text-gray-700 mb-4 animate-bounce">
+              ⏰ TIME'S UP! ⏰
+            </div>
+          </div>
+        )}
+
         <div className="flex justify-center gap-2 sm:gap-4 flex-wrap">
-          {step !== 'done' && step !== 'confirm' && (
+          {(step === 'hour' || step === 'minute' || step === 'second') && (
             <>
               <button
                 onClick={handleSet}
-                disabled={path.length === 0}
-                className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 sm:px-8 py-2 sm:py-3 rounded-lg font-bold text-base sm:text-lg hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-105 active:scale-95"
+                className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 sm:px-8 py-2 sm:py-3 rounded-lg font-bold text-base sm:text-lg hover:from-purple-700 hover:to-pink-700 transition-all transform hover:scale-105 active:scale-95"
               >
                 SET
               </button>
@@ -273,7 +405,25 @@ export default function DrawAlarm() {
               onClick={handleSetAlarm}
               className="bg-gradient-to-r from-green-600 to-teal-600 text-white px-6 sm:px-8 py-2 sm:py-3 rounded-lg font-bold text-base sm:text-lg hover:from-green-700 hover:to-teal-700 transition-all transform hover:scale-105 active:scale-95"
             >
-              SET ALARM
+              START ALARM
+            </button>
+          )}
+
+          {step === 'countdown' && (
+            <button
+              onClick={handleReset}
+              className="bg-red-600 text-white px-6 sm:px-8 py-2 sm:py-3 rounded-lg font-bold text-base sm:text-lg hover:bg-red-700 transition-all transform hover:scale-105 active:scale-95"
+            >
+              CANCEL
+            </button>
+          )}
+
+          {step === 'ringing' && (
+            <button
+              onClick={handleStopAlarm}
+              className="bg-red-600 text-white px-8 sm:px-12 py-4 sm:py-6 rounded-lg font-bold text-xl sm:text-2xl hover:bg-red-700 transition-all transform hover:scale-105 active:scale-95 animate-pulse"
+            >
+              🛑 STOP ALARM
             </button>
           )}
 
@@ -290,22 +440,21 @@ export default function DrawAlarm() {
         {step === 'done' && (
           <div className="mt-8 p-6 bg-gradient-to-r from-green-100 to-teal-100 rounded-lg border-2 border-green-500">
             <h2 className="text-2xl font-bold text-center text-green-800 mb-3">
-              ✅ ALARM SET SUCCESSFULLY!
+              ✅ ALARM COMPLETED!
             </h2>
             <p className="text-center text-gray-700 text-lg">
-              Time is set for: <span className="font-bold">{hour.toFixed(2)} hours, {minute.toFixed(2)} minutes, {second.toFixed(2)} seconds</span>
-            </p>
-            <p className="text-center text-gray-600 text-sm mt-2">
-              Total time: {(hour * 3600 + minute * 60 + second).toFixed(2)} seconds
+              Timer was set for: <span className="font-bold">{hour.toFixed(2)} hours, {minute.toFixed(2)} minutes, {second.toFixed(2)} seconds</span>
             </p>
           </div>
         )}
 
-        <div className="mt-4 sm:mt-6 text-center text-xs text-gray-500">
-          <p>💡 Pro tip: Draw longer lines for bigger numbers!</p>
-          <p className="mt-1 hidden sm:block">🎨 Remember to click and hold while drawing</p>
-          <p className="mt-1 sm:hidden">🎨 Touch and drag to draw!</p>
-        </div>
+        {(step === 'hour' || step === 'minute' || step === 'second') && (
+          <div className="mt-4 sm:mt-6 text-center text-xs text-gray-500">
+            <p>💡 Pro tip: Draw longer lines for bigger numbers!</p>
+            <p className="mt-1 hidden sm:block">🎨 Remember to click and hold while drawing</p>
+            <p className="mt-1 sm:hidden">🎨 Touch and drag to draw!</p>
+          </div>
+        )}
       </div>
     </div>
   );
